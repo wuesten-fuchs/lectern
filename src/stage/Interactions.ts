@@ -218,7 +218,7 @@ export class Interactions {
       return;
     }
     // Empty canvas: a note here. A dense slide may have no gap left to double-click, so
-    // notes keep their other routes — right-click anywhere on the slide, or `N`.
+    // notes keep their other routes — right-click anywhere on the slide, or the Note for AI button.
     this.host.dblClickEmpty?.(ev.clientX, ev.clientY);
   };
 

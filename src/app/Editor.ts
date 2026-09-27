@@ -673,7 +673,7 @@ export class Editor implements InteractionHost {
   /**
    * A note for the assistant at a point on the slide, whatever is under it.
    * A dense slide has no empty space to double-click, so this is also reached by
-   * right-click and by N — placing a note must not depend on finding a gap.
+   * right-click — placing a note must not depend on finding a gap.
    */
   insertNoteAt(clientX: number, clientY: number): Element | null {
     if (!this.doc.length || !this.onSlide(clientX, clientY)) return null;
@@ -694,9 +694,6 @@ export class Editor implements InteractionHost {
   contextMenu(clientX: number, clientY: number): void {
     this.insertNoteAt(clientX, clientY);
   }
-
-  /** Where the pointer last was over the canvas, so N can place a note there. */
-  pointer: { x: number; y: number } | null = null;
 
   rotationOf(src: Element): number {
     const t = (src as HTMLElement).style?.transform ?? '';
