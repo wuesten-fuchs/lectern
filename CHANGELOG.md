@@ -2,6 +2,26 @@
 
 All notable changes to Lectern are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.4.0] — 2026-09-27
+
+### Fixed
+- **Text being edited can be selected.** Every click inside the text you were editing ended
+  the edit, so a drag, a double-clicked word, a triple-click or a shift-click never selected
+  anything, and there was no way to pick out a phrase and delete it. The check for "clicked
+  outside the text" used `instanceof Node` on an event from the slide iframe, a different
+  JavaScript realm, where it is always false. Inside an edit the browser's own gestures now
+  work: click for the caret, drag to select, double-click a word, triple-click a paragraph,
+  `⇧`-click to extend, `⌘A`, `⌫` on the selection.
+  ([#6](https://github.com/calumhrmurray/lectern/issues/6))
+
+### Changed
+- **Double-click on text selects all of it**, as in Figma and Canva, so it can be retyped or
+  deleted at once; a drag straight afterwards selects part of it instead.
+- **Clicking text that is already selected puts the caret there**, as in Keynote, so *click,
+  then click and drag* selects part of it. A drag on a selected object still moves it.
+- The shortcuts dialog no longer offers *Click again: select the parent object*, which
+  nothing implemented.
+
 ## [2.3.0] — 2026-09-09
 
 ### Changed
