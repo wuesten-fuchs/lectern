@@ -146,7 +146,7 @@ export class Panels {
     const notes = collectAiNotes(ed.doc);
     this.aiList.replaceChildren();
     if (!notes.length) {
-      this.aiList.appendChild(h('div', { class: 'lec-panel-hint', style: 'padding:12px' }, 'No notes yet. Press N on a slide (or the “Note for AI” button) and write what you want done there, e.g. “draw a whale here”.'));
+      this.aiList.appendChild(h('div', { class: 'lec-panel-hint', style: 'padding:12px' }, 'No notes yet. Right-click the spot on a slide (or use the “Note for AI” button) and write what you want done there, e.g. “draw a whale here”.'));
       return;
     }
     for (const n of notes) {

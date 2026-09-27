@@ -40,7 +40,7 @@ reach the network.
 ## The loop
 
 1. Scaffold a deck and write the slides into `index.html` — one `<section>` per slide.
-2. Open the editor for the person; tell them to double-click or right-click a slide to leave a note.
+2. Open the editor for the person; tell them to right-click a slide (or double-click an empty spot) to leave a note.
 3. They leave notes; `lectern notes` lists them. Do each one in the file, then append
    `<p data-by="ai">what you did</p>` inside the note and set `data-ai-note="done"`. Never delete a note.
 4. Keep untouched slides byte-identical: Lectern splices only the changed sections back into the file.

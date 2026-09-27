@@ -21,6 +21,9 @@ All notable changes to Lectern are recorded here. The format follows [Keep a Cha
   then click and drag* selects part of it. A drag on a selected object still moves it.
 - The shortcuts dialog no longer offers *Click again: select the parent object*, which
   nothing implemented.
+- Help text caught up with 2.3.0, where `N` became *new slide*: the Notes panel, the tools
+  tooltip, the tutorial and the guide for assistants (`AGENTS.md`, `llms.txt`, the skill's
+  `reference.md`) no longer say `N` leaves a note, and say double-click edits text.
 
 ## [2.3.0] — 2026-09-09
 

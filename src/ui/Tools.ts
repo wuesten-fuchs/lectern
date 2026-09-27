@@ -67,7 +67,7 @@ export class Tools {
       tool('bullets', 'bullets', 'Bullet list', () => ed.insertElement('bullets')),
       tool('image', 'image', 'Image…', () => void app.insertImageViaDialog()),
       tool('shape', 'shape', 'Rectangle', () => ed.insertElement('rect')),
-      tool('ainote', 'sparkle', 'Note for AI (N)', () => ed.insertElement('ainote', { edit: true })),
+      tool('ainote', 'sparkle', 'Note for AI', () => ed.insertElement('ainote', { edit: true })),
       h('div', { class: 'lec-tools-rule' }),
       tool('more', 'inspector', 'Everything else', () => this.menu()),
     );

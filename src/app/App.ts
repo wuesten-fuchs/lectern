@@ -851,7 +851,6 @@ export class App {
       this.toggleDark();
       this.tips.show('room');
     });
-    this.els.center.addEventListener('pointermove', (ev) => { this.editor.pointer = { x: ev.clientX, y: ev.clientY }; });
     window.addEventListener('keydown', (ev) => this.handleKey(ev));
     const unpeek = () => this.root.classList.remove('lec-peek');
     window.addEventListener('keyup', (ev) => { if (ev.key === ' ') unpeek(); });
