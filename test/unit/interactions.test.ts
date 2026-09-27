@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { Interactions, type DragSession, type InteractionHost } from '../../src/stage/Interactions';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DBL_CLICK_MS, Interactions, type DragSession, type InteractionHost } from '../../src/stage/Interactions';
 import type { HandleName } from '../../src/stage/geometry';
 import type { Overlay } from '../../src/stage/Overlay';
 import type { Rect } from '../../src/stage/Stage';
@@ -54,12 +54,14 @@ class FakeHost implements InteractionHost {
   beginMove(els: Element[]): DragSession | null { return this.session(`move:${els.map((e) => e.id).join(',')}`); }
   beginResize(el: Element, handle: HandleName): DragSession | null { return this.session(`resize:${el.id}:${handle}`); }
   beginRotate(el: Element): DragSession | null { return this.session(`rotate:${el.id}`); }
-  startTextEdit(el: Element): void { this.calls.push(`edit:${el.id}`); }
+  startTextEdit(el: Element, caret?: { clientX: number }, opts?: { replaceAll?: boolean }): void {
+    this.calls.push(`edit:${el.id}${caret ? `@${caret.clientX}` : ''}${opts?.replaceAll ? ':all' : ''}`);
+  }
   setHover(el: Element | null): void { this.calls.push(`hover:${el?.id ?? '-'}`); }
   setMarquee(rect: Rect | null): void { this.marquee = rect; this.calls.push(rect ? `marquee:${rect.x},${rect.y},${rect.w},${rect.h}` : 'marquee:-'); }
   isTextEditable(el: Element): boolean { return el.tagName === 'P'; }
   rotationOf(): number { return 0; }
-  clickTarget(el: Element): void { this.calls.push(`click:${el.id}`); }
+  clickTarget(el: Element): boolean { this.calls.push(`click:${el.id}`); return el.id === 'note'; }
   dblClickEmpty(x: number, y: number): void { this.calls.push(`dblEmpty:${x},${y}`); }
   dblClickTarget(el: Element): boolean { const handled = el.id === 'note'; if (handled) this.calls.push(`dblNote:${el.id}`); return handled; }
 }
@@ -204,8 +206,8 @@ describe('Interactions', () => {
 
   it('double-click edits text, leaves a note on empty canvas, and lets a note handle itself', () => {
     const dbl = (x: number) => overlay.el.dispatchEvent(new MouseEvent('dblclick', { clientX: x, clientY: 5, bubbles: true }));
-    dbl(300); // on a text object: edit it, with the caret where you clicked
-    expect(actions()).toEqual(['select:replace:p', 'edit:p']);
+    dbl(300); // on a text object: edit it with all of its text selected
+    expect(actions()).toEqual(['select:replace:p', 'edit:p:all']);
     host.calls = [];
     dbl(50); // empty canvas
     expect(actions()).toEqual(['dblEmpty:50,5']);
@@ -213,6 +215,50 @@ describe('Interactions', () => {
     host.hits.set(70, el('note'));
     dbl(70); // an existing note: its own handler, no new note
     expect(actions()).toEqual(['dblNote:note']);
+  });
+
+  describe('a second click on selected text', () => {
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
+    const dbl = (x: number) => overlay.el.dispatchEvent(new MouseEvent('dblclick', { clientX: x, clientY: 5, bubbles: true }));
+
+    it('puts the caret where it landed, once the double-click window has passed', () => {
+      down(300); up(300); // selects
+      vi.advanceTimersByTime(DBL_CLICK_MS * 2);
+      expect(actions()).toEqual(['select:replace:p', 'click:p']);
+      host.calls = [];
+      down(300); up(300); // again: the caret goes there
+      expect(actions()).toEqual(['select:replace:p', 'click:p']);
+      vi.advanceTimersByTime(DBL_CLICK_MS);
+      expect(actions().at(-1)).toBe('edit:p@300');
+    });
+
+    it('gives way to a double-click, to a drag, and to a note', () => {
+      host.sel = [p];
+      down(300); up(300); dbl(300);
+      vi.advanceTimersByTime(DBL_CLICK_MS * 2);
+      expect(actions().filter((c) => c.startsWith('edit:'))).toEqual(['edit:p:all']);
+      host.calls = [];
+      down(300); up(300); down(300); move(330); // a click then a drag: the drag moves it
+      vi.advanceTimersByTime(DBL_CLICK_MS * 2);
+      up(330);
+      expect(actions().some((c) => c.startsWith('edit:'))).toBe(false);
+      expect(host.sessions.at(-1)?.committed).toBe(true);
+      host.calls = [];
+      const note = el('note', 'p');
+      host.hits.set(70, note); host.sel = [note];
+      down(70); up(70);
+      vi.advanceTimersByTime(DBL_CLICK_MS * 2);
+      expect(actions()).toEqual(['select:replace:note', 'click:note']);
+    });
+
+    it('does nothing when the object was one of several selected', () => {
+      host.sel = [p, a];
+      down(300); up(300);
+      vi.advanceTimersByTime(DBL_CLICK_MS * 2);
+      expect(actions().some((c) => c.startsWith('edit:'))).toBe(false);
+      expect(host.sel).toEqual([p]);
+    });
   });
 
   it('hovering reports the object under the pointer, and nothing while over a handle', () => {
