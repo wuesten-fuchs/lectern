@@ -1,7 +1,8 @@
 /**
  * Interactions — the pointer state machine for the canvas overlay:
  * click-to-select, shift-click, drag to move, handle drags to resize/rotate,
- * marquee selection on empty canvas, double-click to edit text.
+ * marquee selection on empty canvas, double-click to edit text, and a second
+ * click on selected text to put the caret there.
  *
  * It talks to the editor through the `InteractionHost` interface so the
  * logic stays testable and independent of the UI.
@@ -31,7 +32,8 @@ export interface InteractionHost {
   beginMove(els: Element[]): DragSession | null;
   beginResize(el: Element, handle: HandleName): DragSession | null;
   beginRotate(el: Element, originClient: { x: number; y: number }): DragSession | null;
-  startTextEdit(el: Element, caret?: { clientX: number; clientY: number }): void;
+  /** `replaceAll` starts with all the text selected instead of a caret. */
+  startTextEdit(el: Element, caret?: { clientX: number; clientY: number }, opts?: { replaceAll?: boolean }): void;
   setHover(el: Element | null): void;
   setMarquee(rect: Rect | null): void;
   isTextEditable(el: Element): boolean;
@@ -42,20 +44,23 @@ export interface InteractionHost {
   dblClickEmpty?(clientX: number, clientY: number): void;
   /** Double-click on an object; return true to swallow it (no text editing). */
   dblClickTarget?(el: Element): boolean;
-  /** Plain click (no drag) on an object, after selection. */
-  clickTarget?(el: Element): void;
+  /** Plain click (no drag) on an object, after selection; return true if it was handled (a note opens). */
+  clickTarget?(el: Element): boolean;
 }
 
 type State =
   | { kind: 'idle' }
-  | { kind: 'press'; x: number; y: number; target: Element | null; handle: HandleName | 'rotate' | null; shift: boolean; moved: boolean; pointerId: number; wasSelected: boolean }
+  | { kind: 'press'; x: number; y: number; target: Element | null; handle: HandleName | 'rotate' | null; shift: boolean; moved: boolean; pointerId: number; wasSelected: boolean; again: boolean }
   | { kind: 'drag'; x: number; y: number; session: DragSession; pointerId: number; cursor: string }
   | { kind: 'marquee'; x: number; y: number; pointerId: number; additive: boolean };
 
 const DRAG_THRESHOLD = 3;
+/** How long a click on selected text waits before placing the caret, so a double-click can win. */
+export const DBL_CLICK_MS = 260;
 
 export class Interactions {
   private state: State = { kind: 'idle' };
+  private caretTimer = 0;
 
   constructor(readonly overlay: Overlay, readonly host: InteractionHost) {
     const el = overlay.el;
@@ -81,6 +86,7 @@ export class Interactions {
     if (ev.button !== 0) return;
     if (this.overlay.isTextMode) return;
     ev.preventDefault();
+    clearTimeout(this.caretTimer);
     this.overlay.el.focus({ preventScroll: true });
     const handle = this.overlay.handleAt(ev.target);
     const selection = this.host.selection();
@@ -91,7 +97,8 @@ export class Interactions {
       target = this.host.hitTest(ev.clientX, ev.clientY);
     }
     const wasSelected = !!target && selection.includes(target);
-    this.state = { kind: 'press', x: ev.clientX, y: ev.clientY, target, handle, shift: ev.shiftKey || ev.metaKey, moved: false, pointerId: ev.pointerId, wasSelected };
+    const again = wasSelected && selection.length === 1;
+    this.state = { kind: 'press', x: ev.clientX, y: ev.clientY, target, handle, shift: ev.shiftKey || ev.metaKey, moved: false, pointerId: ev.pointerId, wasSelected, again };
     this.overlay.el.setPointerCapture(ev.pointerId);
 
     if (!handle && target && !wasSelected) {
@@ -173,7 +180,14 @@ export class Interactions {
       if (s.target) {
         if (s.shift && s.wasSelected) this.host.select([s.target], 'toggle');
         else if (!s.shift && s.wasSelected && !s.handle) this.host.select([s.target], 'replace');
-        if (!s.shift && !s.handle) this.host.clickTarget?.(s.target);
+        if (!s.shift && !s.handle && !this.host.clickTarget?.(s.target) && s.again && this.host.isTextEditable(s.target)) {
+          // A second click on text that is already selected puts the caret there, as in Keynote,
+          // so "click, then click and drag" selects part of it. A drag still moves the object.
+          const target = s.target, caret = { clientX: ev.clientX, clientY: ev.clientY };
+          this.caretTimer = window.setTimeout(() => {
+            if (!this.overlay.isTextMode && this.host.selection()[0] === target) this.host.startTextEdit(target, caret);
+          }, DBL_CLICK_MS);
+        }
       } else if (!s.shift) {
         this.host.clearSelection();
       }
@@ -191,15 +205,16 @@ export class Interactions {
   private onDblClick = (ev: MouseEvent): void => {
     if (this.overlay.isTextMode) return;
     ev.preventDefault();
+    clearTimeout(this.caretTimer);
     const target = this.host.hitTest(ev.clientX, ev.clientY);
     // A note handles its own double-click (comment, or dismiss when it is done).
     if (target && this.host.dblClickTarget?.(target)) return;
-    // Text under the pointer: edit it, with the caret where you clicked. This is the
-    // gesture people arrive with, and taking it away made a wordy slide tiring to work
-    // on — every attempt to fix a word left a note to dismiss.
+    // Text under the pointer: edit it with all of it selected, as Figma and Canva do, so it can
+    // be retyped or deleted at once. Once editing, the browser's own gestures take over: a click
+    // places the caret, a drag selects, a double-click takes a word, a triple-click the paragraph.
     if (target && this.host.isTextEditable(target)) {
       this.host.select([target], 'replace');
-      this.host.startTextEdit(target, { clientX: ev.clientX, clientY: ev.clientY });
+      this.host.startTextEdit(target, undefined, { replaceAll: true });
       return;
     }
     // Empty canvas: a note here. A dense slide may have no gap left to double-click, so

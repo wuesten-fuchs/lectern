@@ -171,6 +171,58 @@ test('double-click on text edits the text, not a note over it', async ({ page })
   expect(edited).not.toContain('data-ai-note');
 });
 
+test('text is selected the way it is in any editor (#6)', async ({ page }) => {
+  const frame = await openDeck(page);
+  await goToSlide(page, 1);
+  const h2 = frame.locator('section.present h2');
+  const b = (await h2.boundingBox())!;
+  const textWidth = await h2.evaluate((h) => { const r = document.createRange(); r.selectNodeContents(h); return r.getBoundingClientRect().width; });
+  const y = b.y + b.height / 2;
+  const at = (f: number) => b.x + textWidth * f;
+  const selected = () => page.evaluate(() => (document.querySelector('.lec-stage-frame') as HTMLIFrameElement).contentWindow!.getSelection()!.toString());
+  const editing = frame.locator('section.present h2[contenteditable="true"]');
+  expect(await h2.textContent()).toBe('Three things to remember.');
+
+  // Double-click selects all of it; a drag then selects part of it instead of dragging it away.
+  await page.mouse.dblclick(at(0.3), y);
+  await expect(editing).toBeVisible();
+  expect(await selected()).toBe('Three things to remember.');
+  await drag(page, { x: at(0.02), y }, { x: at(0.5), y });
+  await expect(editing).toBeVisible(); // pressing inside the text no longer ends the edit
+  expect(await selected()).toMatch(/^Three thin/);
+  // Double-click a word, triple-click the paragraph, shift-click to extend.
+  await page.mouse.dblclick(at(0.3), y);
+  expect(await selected()).toBe('things');
+  await page.mouse.click(at(0.3), y, { clickCount: 3 });
+  expect(await selected()).toBe('Three things to remember.');
+  await page.mouse.click(at(0.02), y);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(at(0.5), y);
+  await page.keyboard.up('Shift');
+  expect(await selected()).toBe('Three things ');
+  // ...and ⌫ deletes just that.
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Escape');
+  expect(await serialized(page)).toContain('>to remember.</h2>');
+
+  // A click on text that is already selected puts the caret there, so a drag after it selects.
+  await page.evaluate(() => (window as unknown as { lectern: { editor: { clearSelection: () => void } } }).lectern.editor.clearSelection());
+  const nb = (await h2.boundingBox())!, ny = nb.y + nb.height / 2;
+  await page.mouse.click(nb.x + 20, ny);
+  await page.waitForTimeout(400);
+  await expect(editing).toHaveCount(0); // the first click only selects the object
+  await page.mouse.click(nb.x + 20, ny);
+  await expect(editing).toBeVisible();
+  await drag(page, { x: nb.x + 2, y: ny }, { x: nb.x + 40, y: ny });
+  expect((await selected()).length).toBeGreaterThan(1);
+  await page.keyboard.press('Escape');
+
+  // A drag on a selected object still moves it.
+  await drag(page, { x: nb.x + 20, y: ny }, { x: nb.x + 80, y: ny + 30 });
+  await expect(editing).toHaveCount(0);
+  expect(await h2.getAttribute('style')).toMatch(/position: ?relative/);
+});
+
 test('a note lands where you point, even on a slide full of text', async ({ page }) => {
   const frame = await openDeck(page);
   await goToSlide(page, 1); // a heading and a list: no empty space to aim at

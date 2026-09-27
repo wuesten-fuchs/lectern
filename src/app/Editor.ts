@@ -12,7 +12,7 @@ import { SECTION_ATTR } from '../deck/sections';
 import { ELEMENT_TEMPLATES, updateLineSvg } from '../deck/templates';
 import { isAiNote, isDoneNote } from '../deck/aiNotes';
 import { angleDeg, resizeRect, snapEdge, snapLines, snapMove, unionRect, rectsIntersect, type Guide, type HandleName } from '../stage/geometry';
-import { Interactions, type DragSession, type InteractionHost } from '../stage/Interactions';
+import { DBL_CLICK_MS, Interactions, type DragSession, type InteractionHost } from '../stage/Interactions';
 import { Overlay, type OverlayBox } from '../stage/Overlay';
 import { Stage, type Rect, type SlideRef } from '../stage/Stage';
 import { TextSession } from '../stage/textEditing';
@@ -589,11 +589,13 @@ export class Editor implements InteractionHost {
   private commentTimer = 0;
 
   /** A plain click on a note opens it (after the double-click window, so a double-click can dismiss instead). */
-  clickTarget(el: Element): void {
+  clickTarget(el: Element): boolean {
     clearTimeout(this.commentTimer);
-    if (isAiNote(el) && !this.textSession) {
-      this.commentTimer = window.setTimeout(() => { if (this.sel[0] === el && !this.textSession && el.isConnected) this.editNote(el); }, 260);
+    if (!isAiNote(el)) return false;
+    if (!this.textSession) {
+      this.commentTimer = window.setTimeout(() => { if (this.sel[0] === el && !this.textSession && el.isConnected) this.editNote(el); }, DBL_CLICK_MS);
     }
+    return true;
   }
 
   /**

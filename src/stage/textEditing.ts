@@ -53,8 +53,17 @@ export class TextSession {
       doc.execCommand('insertText', false, text);
     };
     const onDrop = (ev: DragEvent) => ev.preventDefault();
+    // A press inside selected text would start dragging that text away, and a drop does nothing
+    // here, so after a double-click has selected everything a drag would select nothing. Collapse
+    // first and the press starts a new selection, as it does in slide editors. Shift-click still extends.
+    const onMouseDown = (ev: MouseEvent) => {
+      const sel = stage.win.getSelection();
+      if (ev.detail === 1 && !ev.shiftKey && sel && !sel.isCollapsed) sel.collapseToStart();
+    };
     const onPointerDownCapture = (ev: PointerEvent) => {
-      if (ev.target instanceof Node && live.contains(ev.target)) return;
+      // The event comes from the iframe's realm, where `instanceof Node` is always false:
+      // that check once made every click inside the text end the edit, so nothing could be selected.
+      if (ev.target && live.contains(ev.target as Node)) return;
       const changed = this.commit();
       this.opts.onOutsidePointerDown?.(ev.clientX, ev.clientY, ev);
       void changed;
@@ -63,17 +72,19 @@ export class TextSession {
     live.addEventListener('keydown', onKeyDown);
     live.addEventListener('paste', onPaste);
     live.addEventListener('drop', onDrop);
+    live.addEventListener('mousedown', onMouseDown);
     doc.addEventListener('pointerdown', onPointerDownCapture, true);
     this.cleanup.push(() => {
       live.removeEventListener('input', onInput);
       live.removeEventListener('keydown', onKeyDown);
       live.removeEventListener('paste', onPaste);
       live.removeEventListener('drop', onDrop);
+      live.removeEventListener('mousedown', onMouseDown);
       doc.removeEventListener('pointerdown', onPointerDownCapture, true);
     });
 
     live.focus({ preventScroll: true });
-    // Place the caret where the user double-clicked, or select all for fresh placeholders.
+    // Place the caret where the user clicked, or select all for fresh placeholders.
     const sel = stage.win.getSelection();
     if (caret && (doc as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null }).caretRangeFromPoint) {
       const r = (doc as Document & { caretRangeFromPoint: (x: number, y: number) => Range | null }).caretRangeFromPoint(caret.clientX, caret.clientY);

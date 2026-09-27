@@ -53,7 +53,9 @@ class vocabulary, the notes protocol and the editing rules:
 - **Canvas editing** — click to select, drag to move with snapping guides (slide edges, centre
   lines, other objects' edges), 8-handle resize (images keep their aspect ratio), rotate,
   marquee and shift-click multi-select, arrow-key nudging, align / distribute / z-order.
-- **Text in place** — click any text and press `⏎` (or just type over it); bold/italic/underline/lists/links, `Tab` to indent
+- **Text in place** — double-click text to edit it with all of it selected, or click text that is already selected to put
+  the caret there (`⏎`, or just typing over it, work too). Inside, text selects as it does anywhere: drag, double-click a
+  word, triple-click a paragraph, `⇧`-click to extend. Bold/italic/underline/lists/links, `Tab` to indent
   list items, LaTeX kept as source and re-typeset by the deck's KaTeX/MathJax on commit.
 - **Layout-aware** — elements laid out by your CSS are *nudged* (`position: relative`) so
   nothing else jumps; new objects are free-floating (`position: absolute`). Switch either way
@@ -172,7 +174,7 @@ your own.
 
 ## Keyboard
 
-`⌘S` save · `⌘Z / ⌘⇧Z` undo/redo · right-click leaves a note for AI · `⏎` edit selected text · `Esc` stop editing / deselect ·
+`⌘S` save · `⌘Z / ⌘⇧Z` undo/redo · right-click leaves a note for AI · double-click or `⏎` edit text · `Esc` stop editing / deselect ·
 `⌘C/X/V/D` copy/cut/paste/duplicate · `⌫` delete · arrows nudge (`⇧` 10 px) ·
 `⇧`-drag constrain / keep aspect · `⌥`-drag ignore snapping · `PgUp/PgDn` slides ·
 `⌘⇧N` new slide · `⌘]`/`⌘[` forward/backward · typing with a text object selected edits it ·
