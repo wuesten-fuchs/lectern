@@ -67,7 +67,9 @@ export class App {
   zoom = 1;
   visible = { navigator: true, inspector: true };
   /** The editor's room: off-white by default, dark when you click the background. Remembered. */
-  dark = localStorage.getItem('lectern:dark') === 'on';
+  // Fork: the room follows the system appearance (macOS light/dark), not a click on the background.
+  private readonly systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+  dark = this.systemDark.matches;
   /** Quiet mode: the slide keeps the screen, the panels step out of the way. On by default; remembered. */
   quiet = localStorage.getItem('lectern:quiet') !== 'off';
   /** Fork: the slide strip on its own in quiet mode, Keynote-style. Off by default; remembered. */
@@ -878,9 +880,9 @@ export class App {
       if (t?.closest('.lec-neighbour, .lec-quietbar, .lec-tools, .lec-panels, .lec-map, .lec-banner, .lec-modal-backdrop')) return;
       if (this.editor.textSession || !this.editor.ready) return;
       if (this.editor.onSlide(ev.clientX, ev.clientY)) return;
-      this.toggleDark();
-      this.tips.show('room');
+      // Fork: no room switch here; the room follows the system (see `systemDark`).
     });
+    this.systemDark.addEventListener('change', (ev) => this.setDark(ev.matches));
     window.addEventListener('keydown', (ev) => this.handleKey(ev));
     const unpeek = () => this.root.classList.remove('lec-peek');
     window.addEventListener('keyup', (ev) => { if (ev.key === ' ') unpeek(); });

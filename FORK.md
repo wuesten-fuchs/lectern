@@ -5,6 +5,7 @@ Florians Fork. `origin` ist der Fork (wuesten-fuchs/lectern), `upstream` das Ori
 ## Was der Fork anders macht
 
 - **Folienleiste unten links:** Der erste Knopf in der Leiste unten links blendet die Folienübersicht ein und aus, auch im Quiet-Modus, ohne Toolbar und Inspector. Löschen per Rechtsklick auf ein Vorschaubild oder mit ⌫. (`App.toggleSlideStrip`, CSS `.lec-slide-strip`, Icon `slides` aus Lucide)
+- **Hell oder dunkel wie macOS:** Der Editor folgt der Systemeinstellung und wechselt live mit. Ein Klick neben die Folie schaltet nicht mehr um. (`App.systemDark`)
 - **Vorschaubilder ohne Versatz:** reveal schreibt Folien, die es gerade nicht zeigt, ein `top` von halber Folienhöhe. Die Vorschau rechnet das nach dem Laden neu (`ThumbnailRenderer.recenterOnLoad`).
 
 Fork-Stellen im Code tragen den Kommentar `Fork:`.
