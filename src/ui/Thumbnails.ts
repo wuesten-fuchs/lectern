@@ -111,6 +111,24 @@ export class ThumbnailRenderer {
         `<div class="lec-bg" style="${escapeAttr(bg)}"></div>${clone.outerHTML}</div></div></body></html>`;
     }
     iframe.srcdoc = html;
+    if (stage.kind !== 'plain') this.recenterOnLoad(iframe, live);
+  }
+
+  /**
+   * Fork: reveal centres a slide by writing `top` when it lays it out, and for a
+   * slide it is not showing (display:none, so scrollHeight 0) that comes out as
+   * half the slide height. The clone would inherit the bogus offset, so the
+   * thumbnail redoes reveal's own sum once its copy has a real height.
+   */
+  private recenterOnLoad(iframe: HTMLIFrameElement, live: Element): void {
+    const center = this.editor.stage.reveal?.getConfig().center ?? true;
+    const height = this.editor.stage.slideSize.height;
+    iframe.addEventListener('load', () => {
+      const section = iframe.contentDocument?.querySelector<HTMLElement>('.reveal .slides > section');
+      if (!section) return;
+      if (center || live.classList.contains('center')) section.style.top = `${Math.max((height - section.scrollHeight) / 2, 0)}px`;
+      else section.style.top = '';
+    }, { once: true });
   }
 }
 

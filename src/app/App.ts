@@ -70,6 +70,9 @@ export class App {
   dark = localStorage.getItem('lectern:dark') === 'on';
   /** Quiet mode: the slide keeps the screen, the panels step out of the way. On by default; remembered. */
   quiet = localStorage.getItem('lectern:quiet') !== 'off';
+  /** Fork: the slide strip on its own in quiet mode, Keynote-style. Off by default; remembered. */
+  slideStrip = localStorage.getItem('lectern:slide-strip') === 'on';
+  private slidesGlyph: HTMLButtonElement;
   private els: { navigator: HTMLElement; stageWrap: HTMLElement; stage: HTMLElement; inspector: HTMLElement; status: HTMLElement; msg: HTMLElement; pos: HTMLElement; path: HTMLElement; welcome: HTMLElement; loading: HTMLElement; dropzone: HTMLElement; compass: HTMLElement; bar: HTMLElement; counter: HTMLElement; center: HTMLElement; map: HTMLElement };
   private toastEl: HTMLElement | null = null;
   /** Last-modified times of the deck's files as we last read or wrote them. */
@@ -96,11 +99,13 @@ export class App {
     const stageWrap = h('div', { class: 'lec-stage-wrap' }, stage, loading, dropzone);
     const panelsEl = h('div', {});
     const compassEl = h('div', { class: 'lec-compass', 'aria-label': 'Deck position' });
-    const glyph = (action: string, icon: 'map' | 'play', title: string, onclick: () => void) =>
+    const glyph = (action: string, icon: 'map' | 'play' | 'slides', title: string, onclick: () => void) =>
       h('button', { class: 'lec-glyph', type: 'button', dataset: { action }, title, onclick }, svgIcon(icons[icon]));
     // Bottom left: where you can go, and everything else. Bottom right: where you are.
     const toolsEl = h('div', { class: 'lec-tools' });
+    this.slidesGlyph = glyph('glyph-slides', 'slides', 'Slides', () => this.toggleSlideStrip());
     const barEl = h('div', { class: 'lec-quietbar' },
+      this.slidesGlyph,
       glyph('glyph-map', 'map', 'Map of the deck (M)', () => this.map.toggle()),
       glyph('glyph-present', 'play', 'Present', () => void this.present()),
       toolsEl,
@@ -132,6 +137,8 @@ export class App {
     this.navigator = new Navigator(this, navigatorEl);
     this.inspector = new Inspector(this, inspectorEl);
     if (this.quiet) root.classList.add('lec-quiet');
+    root.classList.toggle('lec-slide-strip', this.slideStrip);
+    this.syncSlidesGlyph();
     document.documentElement.classList.toggle('lec-dark', this.dark);
     this.wireEditorEvents();
     this.wireGlobalEvents();
@@ -669,6 +676,28 @@ export class App {
     this.els[panel].classList.toggle('lec-hidden', !this.visible[panel]);
     this.toolbar.update();
     if (panel === 'navigator' && this.visible.navigator) this.navigator.fitThumbs();
+    this.syncSlidesGlyph();
+  }
+
+  /**
+   * Fork: the bottom-left button shows or hides the slide strip. In quiet mode it
+   * brings the strip alone and leaves the rest of the chrome away; with the panels
+   * out it is the same as the toolbar's navigator toggle.
+   */
+  toggleSlideStrip(): void {
+    if (!this.quiet) { this.toggle('navigator'); return; }
+    this.slideStrip = !this.slideStrip;
+    this.root.classList.toggle('lec-slide-strip', this.slideStrip);
+    localStorage.setItem('lectern:slide-strip', this.slideStrip ? 'on' : 'off');
+    this.syncSlidesGlyph();
+    if (this.slideStrip) this.navigator.fitThumbs();
+    requestAnimationFrame(() => requestAnimationFrame(() => this.neighbours.update()));
+  }
+
+  private syncSlidesGlyph(): void {
+    const on = this.quiet ? this.slideStrip : this.visible.navigator;
+    this.slidesGlyph.classList.toggle('lec-on', on);
+    this.slidesGlyph.setAttribute('aria-pressed', String(on));
   }
 
   /**
@@ -683,6 +712,7 @@ export class App {
     this.toolbar.update();
     this.compass.render();
     this.tools.setOpen(false);
+    this.syncSlidesGlyph();
     if (this.visible.navigator) this.navigator.fitThumbs();
     // The stage is inset in quiet mode: measure the neighbours after it re-fits.
     requestAnimationFrame(() => requestAnimationFrame(() => this.neighbours.update()));

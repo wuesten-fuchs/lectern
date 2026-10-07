@@ -470,6 +470,10 @@ textarea.lec-field { height: auto; padding: 6px 7px; resize: vertical; font-fami
 .lec-quiet.lec-peek .lec-status { display: flex; }
 /* The slide gives up a little room so more of its neighbours shows: the peeks
    grow with whatever space is left around it. */
+/* Fork: the slide strip alone (bottom-left button), with room under its last thumbnail for the bar. */
+.lec-quiet.lec-slide-strip .lec-navigator { display: block; padding-bottom: 88px; }
+#app.lec-quiet.lec-slide-strip .lec-compass { left: calc(var(--nav-w) + 14px); }
+.lec-glyph.lec-on { color: var(--text); background: var(--panel-2); }
 .lec-quiet .lec-stage-wrap { background-image: none; padding: 2% 11%; }
 .lec-quiet .lec-center { overflow: hidden; }
 
