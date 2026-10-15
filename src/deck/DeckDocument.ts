@@ -204,7 +204,7 @@ export class DeckDocument {
     return { kind: 'deck', sections: this.slides.map((s) => ({ uid: s.uid, source: s.source, html: s.el.outerHTML })) };
   }
 
-  /** Restores a snapshot. Returns the indices of top-level sections whose DOM element was replaced (Fork: for a deck snapshot, all of them, kept or not). */
+  /** Restores a snapshot. Returns the indices of top-level sections whose DOM element was replaced. */
   restore(snap: Snapshot): number[] {
     if (snap.kind === 'section') {
       const rec = this.slides[snap.index];
@@ -232,7 +232,7 @@ export class DeckDocument {
       this.slidesRoot.appendChild(el);
       this.slides.push({ el, uid: s.uid, source: s.source });
     });
-    return this.slides.map((_, i) => i);
+    return this.slides.flatMap((s, i) => (s.el === kept.get(s.uid) ? [] : [i]));
   }
 
   // ---------------------------------------------------------------- slide list operations

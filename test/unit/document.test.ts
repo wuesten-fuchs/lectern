@@ -154,7 +154,7 @@ describe('DeckDocument', () => {
     const els = d.slides.map((s) => s.el);
     d.moveSlide(2, 0);
     d.restore(moved);
-    expect(d.slides.map((s) => s.el)).toEqual(els);
+    els.forEach((el, i) => expect(d.slides[i].el).toBe(el));
 
     const edited = d.snapshotDeck();
     d.slides[1].el.querySelector('h2')!.textContent = 'Changed';

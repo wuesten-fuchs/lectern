@@ -409,10 +409,11 @@ export class Editor implements InteractionHost {
   private restore(snap: Snapshot): void {
     // Fork: a deck restore (undoing a delete, say) re-renders only the slides that
     // changed instead of every one; see `Stage.restoreLive`.
-    const prevSrc = this.doc.slides.map((s) => s.el);
-    const replaced = this.doc.restore(snap);
-    if (snap.kind === 'deck') this.stage.restoreLive(prevSrc);
-    else for (const i of replaced) this.stage.renderSection(i);
+    if (snap.kind === 'deck') {
+      const prevSrc = this.doc.slides.map((s) => s.el);
+      this.doc.restore(snap);
+      this.stage.restoreLive(prevSrc);
+    } else for (const i of this.doc.restore(snap)) this.stage.renderSection(i);
     // Keep the current slide in range.
     if (this.doc.length && this.current.top >= this.doc.length) this.stage.goTo({ top: this.doc.length - 1, sub: null });
     this.emit('change', { tops: snap.kind === 'deck' ? null : [snap.index], label: 'restore' });

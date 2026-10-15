@@ -75,7 +75,7 @@ export class Navigator {
       old.delete(key);
       if (c && (c.iframe.width !== String(width) || c.iframe.height !== String(height))) c = undefined;
       if (!c) c = this.createCard(ref, key, width, height);
-      if (c.html !== html) { c.html = html; c.dirty = true; }
+      if (c.html !== html) c.dirty = true;
       c.ref = ref;
       this.labelCard(c, section);
       nodes.push(c.el);
