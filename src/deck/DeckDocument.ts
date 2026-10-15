@@ -204,7 +204,7 @@ export class DeckDocument {
     return { kind: 'deck', sections: this.slides.map((s) => ({ uid: s.uid, source: s.source, html: s.el.outerHTML })) };
   }
 
-  /** Restores a snapshot. Returns the indices of top-level sections whose DOM element was replaced. */
+  /** Restores a snapshot. Returns the indices of top-level sections whose DOM element was replaced (Fork: for a deck snapshot, all of them, kept or not). */
   restore(snap: Snapshot): number[] {
     if (snap.kind === 'section') {
       const rec = this.slides[snap.index];
@@ -217,13 +217,18 @@ export class DeckDocument {
       rec.uid = snap.uid;
       return [snap.index];
     }
+    // Fork: a slide whose uid and HTML are unchanged keeps its element, so undoing a
+    // delete re-parses only the slide that comes back (and the stage can keep its
+    // rendered copy of every other one, see `Stage.restoreLive`).
+    const kept = new Map(this.slides.map((s) => [s.uid, s.el]));
     for (const s of this.slides) s.el.remove();
     this.slides.length = 0;
     for (const child of Array.from(this.slidesRoot.children)) {
       if (child.tagName.toLowerCase() === 'section') child.remove();
     }
     snap.sections.forEach((s) => {
-      const el = this.parseSection(s.html);
+      const old = kept.get(s.uid);
+      const el = old && old.outerHTML === s.html ? old : this.parseSection(s.html);
       this.slidesRoot.appendChild(el);
       this.slides.push({ el, uid: s.uid, source: s.source });
     });

@@ -567,6 +567,35 @@ export class Stage {
     this.typeset(this.liveRoot);
   }
 
+  /**
+   * Fork: brings the live slides in line with the source after the slide list was
+   * replaced. `prevSrc` are the source elements the live slides were rendered from,
+   * in live order. A source element that is still there keeps its live copy (and
+   * whatever the deck's scripts drew into it); only new or changed slides are
+   * imported, and only slides out of place are moved.
+   */
+  restoreLive(prevSrc: Element[]): void {
+    const prevLive = this.liveTopSections();
+    if (prevLive.length !== prevSrc.length) { this.renderAll(); return; }
+    const liveBySrc = new Map(prevSrc.map((el, i) => [el, prevLive[i]]));
+    const fresh: Element[] = [];
+    const want = this.document.slides.map((rec) => {
+      const live = liveBySrc.get(rec.el);
+      if (live) { liveBySrc.delete(rec.el); return live; }
+      const el = this.doc.importNode(rec.el, true) as Element;
+      this.resolveLiveUrls(el);
+      fresh.push(el);
+      return el;
+    });
+    for (const stale of liveBySrc.values()) stale.remove();
+    want.forEach((el, i) => {
+      const at = this.liveTopSections()[i];
+      if (at !== el) this.liveRoot.insertBefore(el, at ?? null);
+    });
+    this.afterStructureChange();
+    for (const el of fresh) this.typeset(el);
+  }
+
   /** Inserts a live copy of source slide `top` (which must already exist in the source). */
   insertLiveSection(top: number): void {
     const src = this.document.slides[top].el;

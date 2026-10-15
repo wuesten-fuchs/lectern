@@ -98,6 +98,9 @@ export class MapView {
     for (const c of this.cards) this.io.unobserve(c.el);
     this.cards = [];
     this.grid.replaceChildren();
+    // Fork: closed, the map stays empty instead of building one iframe per slide on
+    // every delete or undo; show() renders it fresh when it opens.
+    if (!this.visible) return;
     if (!ed.ready || !ed.doc.length) {
       this.grid.appendChild(h('div', { class: 'lec-nav-empty' }, 'No slides yet.'));
       this.countEl.textContent = '';

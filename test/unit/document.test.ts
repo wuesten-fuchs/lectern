@@ -138,6 +138,34 @@ describe('DeckDocument', () => {
     expect(d.serialize()).toBe(DECK);
   });
 
+  // Fork: undoing a delete keeps the elements of the slides it did not touch.
+  it('reuses unchanged elements when restoring the deck', () => {
+    const d = new DeckDocument(DECK);
+    const [a, b, c] = d.slides.map((s) => s.el);
+    const before = d.snapshotDeck();
+    d.removeSlide(0);
+    d.restore(before);
+    expect(d.slides[0].el).not.toBe(a);
+    expect(d.slides[1].el).toBe(b);
+    expect(d.slides[2].el).toBe(c);
+    expect(d.serialize()).toBe(DECK);
+
+    const moved = d.snapshotDeck();
+    const els = d.slides.map((s) => s.el);
+    d.moveSlide(2, 0);
+    d.restore(moved);
+    expect(d.slides.map((s) => s.el)).toEqual(els);
+
+    const edited = d.snapshotDeck();
+    d.slides[1].el.querySelector('h2')!.textContent = 'Changed';
+    const changed = d.slides[1].el;
+    d.restore(edited);
+    expect(d.slides[1].el).not.toBe(changed);
+    expect(d.slides[1].el.querySelector('h2')!.textContent).toBe('Two');
+    expect(d.slides[2].el).toBe(els[2]);
+    expect(d.serialize()).toBe(DECK);
+  });
+
   it('rebases after a save so undo still splices correctly', () => {
     const d = new DeckDocument(DECK);
     const before = d.snapshotSection(1);

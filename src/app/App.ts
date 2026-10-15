@@ -841,8 +841,9 @@ export class App {
     ed.on('slide', () => { if (ed.current.sub !== null) this.tips.show('stack'); this.navigator.updateCurrent(); this.compass.update(); this.neighbours.update(); this.map.updateCurrent(); this.inspector.render(); this.panels.update(); this.updateStatus(); });
     ed.on('change', ({ tops, label }) => {
       if (tops === null || label === 'Add slide' || label === 'Delete slide' || label === 'Move slide' || label === 'restore' || label === 'Duplicate slide') {
+        // Fork: render() repaints only the thumbnails whose slide changed; a blanket
+        // invalidate(null) here reloaded every visible one after each delete or undo.
         this.navigator.render();
-        this.navigator.invalidate(null);
         this.map.render();
       } else {
         this.navigator.invalidate(tops);

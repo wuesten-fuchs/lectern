@@ -8,7 +8,11 @@ import { h, svgIcon, debounce, modKey } from './dom';
 import { icons } from './icons';
 import { showMenu } from './Menu';
 
-interface Card { ref: SlideRef; el: HTMLElement; iframe: HTMLIFrameElement; dirty: boolean; visible: boolean }
+/** Fork: `key` is the slide's uid plus its stack position; `html` the source the thumbnail last painted. */
+interface Card { ref: SlideRef; key: string; html: string; el: HTMLElement; iframe: HTMLIFrameElement; dirty: boolean; visible: boolean }
+
+/** Fork: how far off screen a card still counts as visible (observer and `inView` alike). */
+const NEAR_PX = 200;
 
 function cardId(ref: SlideRef): string { return `lec-slide-${ref.top}${ref.sub === null ? '' : '-' + ref.sub}`; }
 
@@ -30,7 +34,7 @@ export class Navigator {
         card.visible = e.isIntersecting;
         if (card.visible && card.dirty) this.renderCard(card);
       }
-    }, { root: container, rootMargin: '200px 0px' });
+    }, { root: container, rootMargin: `${NEAR_PX}px 0px` });
 
     container.addEventListener('keydown', (ev) => this.onKey(ev));
     container.addEventListener('contextmenu', (ev) => {
@@ -42,67 +46,122 @@ export class Navigator {
     });
   }
 
-  /** Rebuilds the list of cards (call when the slide list changed). */
+  /**
+   * Rebuilds the list of cards (call when the slide list changed).
+   *
+   * Fork: a card is reused when its slide is still there (same uid, and for a
+   * sub-slide the same position in its stack), so deleting or undoing a delete
+   * keeps every other thumbnail as it is instead of tearing down one iframe per
+   * slide and loading them all again. Only a card whose slide HTML changed, or a
+   * new one, renders; the visible ones right away, not after the debounce.
+   */
   render(): void {
     const ed = this.app.editor;
     for (const c of this.cards) this.io.unobserve(c.el);
+    const old = new Map(this.cards.map((c) => [c.key, c]));
     this.cards = [];
-    this.container.replaceChildren();
-    if (!ed.ready) return;
+    if (!ed.ready) { this.container.replaceChildren(); return; }
     const refs = ed.slideRefs();
+    const nodes: Node[] = [];
     if (!refs.length) {
-      this.container.appendChild(h('div', { class: 'lec-nav-empty' }, 'No slides yet.'));
+      nodes.push(h('div', { class: 'lec-nav-empty' }, 'No slides yet.'));
     }
     const { width, height } = ed.stage.slideSize;
-    const ratio = height / width;
-    let n = 0;
     for (const ref of refs) {
-      const isSub = ref.sub !== null;
-      const numLabel = isSub ? `${ref.top + 1}.${(ref.sub ?? 0) + 1}` : String(ref.top + 1);
-      if (!isSub) n++;
-      // sandbox without allow-scripts: a deck's <script>/onerror must not run inside the editor's origin;
-      // allow-same-origin keeps service-worker-served images loading. Thumbnails are pure HTML/CSS.
-      const iframe = h('iframe', { title: `Slide ${numLabel}`, loading: 'lazy', tabindex: -1, sandbox: 'allow-same-origin', 'aria-hidden': 'true' });
-      iframe.width = String(width); iframe.height = String(height);
-      const wrap = h('div', { class: 'lec-thumb-wrap', style: `padding-bottom:${(ratio * 100).toFixed(3)}%` }, iframe);
+      const key = `${ed.doc.slides[ref.top].uid}/${ref.sub ?? ''}`;
       const section = ed.stage.srcSection(ref);
-      const label = slideLabel(section, '');
-      const vis = section.getAttribute('data-visibility');
-      const card = h('div', {
-        class: `lec-slide-card${isSub ? ' lec-sub' : ''}`, draggable: true, dataset: { top: String(ref.top), sub: ref.sub === null ? '' : String(ref.sub) },
-        title: label, role: 'option', id: cardId(ref), 'aria-selected': 'false', 'aria-label': `Slide ${numLabel}${label ? ': ' + label : ''}${vis ? ` (${vis})` : ''}`,
-      },
-        h('div', { class: 'lec-slide-num' }, numLabel),
-        h('div', { class: 'lec-thumb' }, wrap, h('div', { class: 'lec-thumb-label' }, label || ' ')),
-        vis ? h('span', { class: 'lec-slide-badge' }, vis) : null,
-      );
-      card.addEventListener('click', () => { ed.goTo(ref); this.container.focus(); });
-      card.addEventListener('contextmenu', (ev) => {
+      const html = section.outerHTML;
+      let c = old.get(key);
+      old.delete(key);
+      if (c && (c.iframe.width !== String(width) || c.iframe.height !== String(height))) c = undefined;
+      if (!c) c = this.createCard(ref, key, width, height);
+      if (c.html !== html) { c.html = html; c.dirty = true; }
+      c.ref = ref;
+      this.labelCard(c, section);
+      nodes.push(c.el);
+      this.cards.push(c);
+    }
+    const addBtn = h('button', { class: 'lec-btn lec-nav-add', type: 'button', title: `New slide (${modKey()}⇧N)`, onclick: (e: MouseEvent) => this.app.showNewSlideMenu(e.currentTarget as HTMLElement) }, svgIcon(icons.plus), 'New slide');
+    nodes.push(addBtn);
+    // Drop what is gone first, then move only nodes out of place. Moving an iframe
+    // reloads it (and loses the thumbnail's re-centring), so a moved card repaints.
+    const keep = new Set(nodes);
+    for (const n of Array.from(this.container.childNodes)) if (!keep.has(n)) n.remove();
+    const kids = this.container.childNodes;
+    nodes.forEach((n, i) => {
+      if (kids[i] === n) return;
+      if (n.isConnected) { const moved = this.cards.find((c) => c.el === n); if (moved) moved.dirty = true; }
+      this.container.insertBefore(n, kids[i] ?? null);
+    });
+    for (const c of this.cards) this.io.observe(c.el);
+    this.updateCurrent();
+    this.fitThumbs();
+    for (const c of this.cards) if (c.dirty && this.inView(c)) this.renderCard(c);
+  }
+
+  /** Fork: whether a card is on screen (or near it), measured now rather than waiting for the observer. */
+  private inView(c: Card): boolean {
+    const r = c.el.getBoundingClientRect();
+    const v = this.container.getBoundingClientRect();
+    return r.bottom >= v.top - NEAR_PX && r.top <= v.bottom + NEAR_PX && r.height > 0;
+  }
+
+  /** Fork: one card for a slide; its listeners read `c.ref`, so a reused card follows its slide. */
+  private createCard(ref: SlideRef, key: string, width: number, height: number): Card {
+    const ed = this.app.editor;
+    const isSub = ref.sub !== null;
+    // sandbox without allow-scripts: a deck's <script>/onerror must not run inside the editor's origin;
+    // allow-same-origin keeps service-worker-served images loading. Thumbnails are pure HTML/CSS.
+    const iframe = h('iframe', { loading: 'lazy', tabindex: -1, sandbox: 'allow-same-origin', 'aria-hidden': 'true' });
+    iframe.width = String(width); iframe.height = String(height);
+    const wrap = h('div', { class: 'lec-thumb-wrap', style: `padding-bottom:${((height / width) * 100).toFixed(3)}%` }, iframe);
+    const el = h('div', { class: `lec-slide-card${isSub ? ' lec-sub' : ''}`, draggable: true, role: 'option', 'aria-selected': 'false' },
+      h('div', { class: 'lec-slide-num' }),
+      h('div', { class: 'lec-thumb' }, wrap, h('div', { class: 'lec-thumb-label' }, ' ')),
+    );
+    const c: Card = { ref, key, html: '', el, iframe, dirty: true, visible: false };
+    el.addEventListener('click', () => { ed.goTo(c.ref); this.container.focus(); });
+    el.addEventListener('contextmenu', (ev) => {
       ev.preventDefault();
       // The cards sit flush against each other, so "between two slides" has no pixels of
       // its own. Treat a band at each edge as the seam, the same way dragging reads the
       // midpoint to decide before or after.
-      const r = card.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
       const edge = Math.min(10, r.height * 0.18);
       if (ev.clientY < r.top + edge || ev.clientY > r.bottom - edge) {
         const after = ev.clientY > r.top + r.height / 2;
-        this.showGapMenu(ref.top + (after ? 1 : 0), { x: ev.clientX, y: ev.clientY });
+        this.showGapMenu(c.ref.top + (after ? 1 : 0), { x: ev.clientX, y: ev.clientY });
         return;
       }
-      ed.goTo(ref);
-      this.showMenuFor(ref, { x: ev.clientX, y: ev.clientY });
+      ed.goTo(c.ref);
+      this.showMenuFor(c.ref, { x: ev.clientX, y: ev.clientY });
     });
-      card.addEventListener('dblclick', () => this.app.panels.show('html'));
-      this.wireDrag(card, ref);
-      this.container.appendChild(card);
-      const c: Card = { ref, el: card, iframe, dirty: true, visible: false };
-      this.cards.push(c);
-      this.io.observe(card);
-    }
-    const addBtn = h('button', { class: 'lec-btn lec-nav-add', type: 'button', title: `New slide (${modKey()}⇧N)`, onclick: (e: MouseEvent) => this.app.showNewSlideMenu(e.currentTarget as HTMLElement) }, svgIcon(icons.plus), 'New slide');
-    this.container.appendChild(addBtn);
-    this.updateCurrent();
-    this.fitThumbs();
+    el.addEventListener('dblclick', () => this.app.panels.show('html'));
+    this.wireDrag(c);
+    return c;
+  }
+
+  /** Fork: number, label, badge and ids of a card for its current position. */
+  private labelCard(c: Card, section: Element): void {
+    const { ref, el } = c;
+    const numLabel = ref.sub !== null ? `${ref.top + 1}.${ref.sub + 1}` : String(ref.top + 1);
+    const label = slideLabel(section, '');
+    const vis = section.getAttribute('data-visibility');
+    el.id = cardId(ref);
+    el.dataset.top = String(ref.top);
+    el.dataset.sub = ref.sub === null ? '' : String(ref.sub);
+    el.title = label;
+    el.setAttribute('aria-label', `Slide ${numLabel}${label ? ': ' + label : ''}${vis ? ` (${vis})` : ''}`);
+    c.iframe.title = `Slide ${numLabel}`;
+    const num = el.querySelector('.lec-slide-num')!;
+    if (num.textContent !== numLabel) num.textContent = numLabel;
+    const lab = el.querySelector('.lec-thumb-label')!;
+    if (lab.textContent !== (label || ' ')) lab.textContent = label || ' ';
+    const badge = el.querySelector('.lec-slide-badge');
+    if (vis) {
+      if (badge) badge.textContent = vis;
+      else el.appendChild(h('span', { class: 'lec-slide-badge' }, vis));
+    } else badge?.remove();
   }
 
   /** Scales the thumbnail iframes to the card width. */
@@ -142,27 +201,27 @@ export class Navigator {
     }
     this.allDirty = false;
     this.dirtyTops.clear();
-    // Labels may have changed too.
+    // Labels may have changed too. Fork: the whole card label (title, badge), as render() does.
     for (const c of this.cards) {
-      try {
-        const section = this.app.editor.stage.srcSection(c.ref);
-        const label = slideLabel(section, '');
-        const lab = c.el.querySelector('.lec-thumb-label');
-        if (lab && lab.textContent !== label) lab.textContent = label || ' ';
-      } catch { /* ignore */ }
+      try { this.labelCard(c, this.app.editor.stage.srcSection(c.ref)); } catch { /* ignore */ }
     }
   }
 
   private renderCard(c: Card): void {
     c.dirty = false;
+    // Fork: remember what was painted, so render() knows when the slide changed since.
+    try { c.html = this.app.editor.stage.srcSection(c.ref).outerHTML; } catch { /* ignore */ }
     this.app.thumbs.render(c.ref, c.iframe);
   }
 
   // ---------------------------------------------------------------- drag to reorder
 
-  private wireDrag(card: HTMLElement, ref: SlideRef): void {
+  /** Fork: takes the card, not a ref, so a reused card drags as the slide it shows now. */
+  private wireDrag(c: Card): void {
+    const card = c.el;
     card.addEventListener('dragstart', (ev) => {
-      this.dragFrom = this.cards.findIndex((c) => c.ref.top === ref.top && c.ref.sub === ref.sub);
+      const ref = c.ref;
+      this.dragFrom = this.cards.indexOf(c);
       card.classList.add('lec-dragging');
       ev.dataTransfer?.setData('text/plain', `slide:${ref.top}/${ref.sub}`);
       if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
@@ -189,7 +248,7 @@ export class Navigator {
       const from = this.cards[this.dragFrom].ref;
       this.clearDropMarks();
       this.dragFrom = null;
-      this.dropSlide(from, ref, after);
+      this.dropSlide(from, c.ref, after);
     });
   }
 
